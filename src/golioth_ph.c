@@ -6,7 +6,7 @@
  * temperature override, OEM LED, and calibration.
  *
  * Settings keys (create these in the Golioth console):
- *   SAMPLE_INTERVAL_S  int     seconds between gateway syncs (default 60)
+ *   SAMPLE_INTERVAL_S  int     seconds between gateway syncs (default 300)
  *   TEMP_OVERRIDE_C    float   compensation C if no DS18B20 (NaN/omit = auto)
  *   LED                bool    Atlas OEM LED
  *   CAL_CMD            int     0 idle, 1 clear, 2 low(4.0), 3 mid(7.0), 4 high(10.0)
@@ -130,12 +130,16 @@ static void ph_uplink(void)
 
     if (battery_is_ready() && battery_read(&bat) == 0) {
         len = snprintf(payload, sizeof(payload),
-                       "{\"v\":%.3f,\"ma\":%.1f,\"temp_c\":%.1f,\"vbus\":%s,\"chg\":\"%s\"}",
+                       "{\"v\":%.3f,\"ma\":%.1f,\"temp_c\":%.1f,\"die_c\":%.1f,"
+                       "\"vbus\":%s,\"chg\":\"%s\",\"chg_stat\":%u,\"err\":%u}",
                        (double)bat.voltage_v,
                        (double)bat.current_ma,
                        (double)bat.temp_c,
+                       (double)bat.die_c,
                        bat.vbus ? "true" : "false",
-                       bat.status);
+                       bat.status,
+                       bat.chg_stat,
+                       bat.err);
     } else {
         len = snprintf(payload, sizeof(payload), "{\"error\":\"npm1300\"}");
     }

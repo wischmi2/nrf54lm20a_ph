@@ -11,7 +11,7 @@ menu "XIAO nRF54LM20A pH Sensor"
 
 config EXAMPLE_SYNC_PERIOD_S
     int "Gateway sync period (s)"
-    default 60
+    default 300
     range 5 3600
     help
       After a successful sync, wait this long before requesting the next

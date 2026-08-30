@@ -75,9 +75,10 @@ static void print_sample(void)
     }
 
     if (battery_is_ready() && battery_read(&bat) == 0) {
-        printk("bat: %.3f V  %.1f mA  %.1f C  VBUS=%s  %s\n",
+        printk("bat: %.3f V  %.1f mA  %.1f C  die=%.1f C  VBUS=%s  %s  chg_stat=0x%02x err=0x%02x\n",
                (double)bat.voltage_v, (double)bat.current_ma, (double)bat.temp_c,
-               bat.vbus ? "yes" : "no", bat.status);
+               (double)bat.die_c, bat.vbus ? "yes" : "no", bat.status,
+               bat.chg_stat, bat.err);
     } else {
         printk("bat: nPM1300 not ready\n");
     }

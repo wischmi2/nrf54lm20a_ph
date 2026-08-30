@@ -24,10 +24,13 @@ LOG_MODULE_REGISTER(battery, CONFIG_LOG_DEFAULT_LEVEL);
 #error "nPM1300 charger node pmic_charger is missing from the board DTS"
 #endif
 
-#define NPM13XX_CHG_STATUS_COMPLETE_MASK BIT(1)
-#define NPM13XX_CHG_STATUS_TRICKLE_MASK  BIT(2)
-#define NPM13XX_CHG_STATUS_CC_MASK       BIT(3)
-#define NPM13XX_CHG_STATUS_CV_MASK       BIT(4)
+#define NPM13XX_CHG_STATUS_COMPLETE_MASK  BIT(1)
+#define NPM13XX_CHG_STATUS_TRICKLE_MASK   BIT(2)
+#define NPM13XX_CHG_STATUS_CC_MASK        BIT(3)
+#define NPM13XX_CHG_STATUS_CV_MASK        BIT(4)
+#define NPM13XX_CHG_STATUS_RECHARGE_MASK  BIT(5)
+#define NPM13XX_CHG_STATUS_DIETEMP_MASK   BIT(6)
+#define NPM13XX_CHG_STATUS_SUPPLEMENT_MASK BIT(7)
 
 static const struct device *const charger = DEVICE_DT_GET(CHARGER_NODE);
 static bool charger_ready;
@@ -45,6 +48,15 @@ static const char *charge_status_str(int32_t chg_status)
     }
     if (chg_status & NPM13XX_CHG_STATUS_CV_MASK) {
         return "cv";
+    }
+    if (chg_status & NPM13XX_CHG_STATUS_DIETEMP_MASK) {
+        return "paused";
+    }
+    if (chg_status & NPM13XX_CHG_STATUS_RECHARGE_MASK) {
+        return "recharge";
+    }
+    if (chg_status & NPM13XX_CHG_STATUS_SUPPLEMENT_MASK) {
+        return "supplement";
     }
     return "idle";
 }
@@ -82,9 +94,27 @@ static int read_sensors(struct battery_sample *out)
     if (ret < 0) {
         return ret;
     }
+    out->chg_stat = (uint8_t)value.val1;
     out->status = charge_status_str(value.val1);
 
-    ret = sensor_channel_get(charger, SENSOR_CHAN_NPM13XX_CHARGER_VBUS_STATUS, &value);
+    ret = sensor_channel_get(charger, SENSOR_CHAN_NPM13XX_CHARGER_ERROR, &value);
+    if (ret < 0) {
+        out->err = 0;
+    } else {
+        out->err = (uint8_t)value.val1;
+    }
+
+    ret = sensor_channel_get(charger, SENSOR_CHAN_DIE_TEMP, &value);
+    if (ret < 0) {
+        out->die_c = 0.0f;
+    } else {
+        out->die_c = (float)value.val1 + ((float)value.val2 / 1000000.0f);
+    }
+
+    ret = sensor_attr_get(charger,
+                          (enum sensor_channel)SENSOR_CHAN_NPM13XX_CHARGER_VBUS_STATUS,
+                          (enum sensor_attribute)SENSOR_ATTR_NPM13XX_CHARGER_VBUS_PRESENT,
+                          &value);
     if (ret < 0) {
         out->vbus = false;
     } else {
@@ -112,9 +142,11 @@ int battery_init(void)
     }
 
     charger_ready = true;
-    LOG_INF("nPM1300 ready  V=%.3f I=%.1f mA T=%.1f C VBUS=%s %s",
+    LOG_INF("nPM1300 ready  V=%.3f I=%.1f mA T=%.1f C die=%.1f C VBUS=%s %s chg_stat=0x%02x err=0x%02x",
             (double)sample.voltage_v, (double)sample.current_ma,
-            (double)sample.temp_c, sample.vbus ? "yes" : "no", sample.status);
+            (double)sample.temp_c, (double)sample.die_c,
+            sample.vbus ? "yes" : "no", sample.status,
+            sample.chg_stat, sample.err);
     return 0;
 }
 
@@ -150,10 +182,11 @@ static int cmd_bat_read(const struct shell *sh, size_t argc, char **argv)
         return err;
     }
 
-    shell_print(sh, "V=%.3f I=%.1f mA T=%.1f C VBUS=%s status=%s",
+    shell_print(sh, "V=%.3f I=%.1f mA T=%.1f C die=%.1f C VBUS=%s status=%s chg_stat=0x%02x err=0x%02x",
                 (double)sample.voltage_v, (double)sample.current_ma,
-                (double)sample.temp_c, sample.vbus ? "yes" : "no",
-                sample.status);
+                (double)sample.temp_c, (double)sample.die_c,
+                sample.vbus ? "yes" : "no", sample.status,
+                sample.chg_stat, sample.err);
     return 0;
 }
 

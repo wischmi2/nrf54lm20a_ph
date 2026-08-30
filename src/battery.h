@@ -7,13 +7,17 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stdint.h>
 
 struct battery_sample {
     float voltage_v;
     float current_ma;
     float temp_c;
+    float die_c;
     bool vbus;
     const char *status;
+    uint8_t chg_stat;
+    uint8_t err;
     bool valid;
 };
 
