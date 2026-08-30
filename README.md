@@ -62,7 +62,7 @@ If the OEM is missing or the conversion fails:
 nPM1300 on the XIAO (pack on J3). Same sample instant as `.s/ph`.
 
 ```json
-{"v":3.912,"ma":12.3,"temp_c":24.1,"die_c":32.4,"vbus":true,"chg":"idle","chg_stat":2,"err":0}
+{"v":3.912,"ma":12.3,"temp_c":24.1,"die_c":32.4,"vbus":true,"chg":"idle","chg_stat":2,"err":0,"on_bat_s":0}
 ```
 
 | Field | Type | Meaning |
@@ -72,6 +72,7 @@ nPM1300 on the XIAO (pack on J3). Same sample instant as `.s/ph`.
 | `temp_c` | float | Pack NTC temperature (°C) |
 | `die_c` | float | nPM1300 die temperature (°C) |
 | `vbus` | bool | USB / VBUS present |
+| `on_bat_s` | int | Seconds since USB was unplugged (`0` if VBUS is present). Written to `/lfs1/bat_run.txt` so a dead pack still reports the last run on the next boot |
 | `chg` | string | Charge stage: `idle`, `trickle`, `cc`, `cv`, `complete`, `paused` (die too hot), `recharge`, `supplement` |
 | `chg_stat` | int | Raw `BCHGCHARGESTATUS` byte. Bits: 1 complete, 2 trickle, 3 CC, 4 CV, 5 recharge, 6 die-temp pause, 7 supplement |
 | `err` | int | Latched charger error. `0` is healthy |
@@ -137,7 +138,7 @@ If the bus is stuck after a bad transfer.
 
 | Command | Hardware |
 |---------|----------|
-| `bat` | nPM1300: V, I, pack NTC, die °C, VBUS, charge status/error |
+| `bat` | nPM1300: V, I, pack NTC, die °C, VBUS, charge status/error, `on_bat_s` |
 | `w1 search w1` | DS18B20 on D0 (J2), if fitted |
 | `sensor get ds18b20` | One-shot DS18B20 temperature |
 | `fs ls /lfs1` | LittleFS (device cert lives in `/lfs1/credentials`) |

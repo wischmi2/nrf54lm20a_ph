@@ -21,6 +21,7 @@ LOG_MODULE_REGISTER(main);
 #include "ph_oem.h"
 #include "temp_sensor.h"
 #include "battery.h"
+#include "bat_runtime.h"
 #include "status_led.h"
 #include "golioth_ph.h"
 #include "sample_print.h"
@@ -153,6 +154,7 @@ int main(void)
     if (err) {
         LOG_WRN("nPM1300 init failed (err %d) — pH print continues", err);
     }
+    bat_runtime_init();
 
     err = status_led_init();
     if (err) {

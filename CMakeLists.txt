@@ -19,6 +19,7 @@ target_sources(app PRIVATE
   src/ph_oem.c
   src/temp_sensor.c
   src/battery.c
+  src/bat_runtime.c
   src/status_led.c
   src/power_sleep.c
   src/golioth_ph.c

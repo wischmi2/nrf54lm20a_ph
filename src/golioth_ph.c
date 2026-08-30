@@ -17,6 +17,7 @@
 #include "ph_oem.h"
 #include "temp_sensor.h"
 #include "battery.h"
+#include "bat_runtime.h"
 #include "ble_peripheral.h"
 #include "golioth_ph.h"
 
@@ -37,7 +38,7 @@
 
 LOG_MODULE_REGISTER(golioth_ph);
 
-#define UPLINK_BUF 192
+#define UPLINK_BUF 220
 
 static float temp_override_c;
 static bool temp_override_set;
@@ -132,7 +133,8 @@ static void ph_uplink(void)
     if (battery_is_ready() && battery_read(&bat) == 0) {
         len = snprintf(payload, sizeof(payload),
                        "{\"v\":%.3f,\"ma\":%.1f,\"temp_c\":%.1f,\"die_c\":%.1f,"
-                       "\"vbus\":%s,\"chg\":\"%s\",\"chg_stat\":%u,\"err\":%u}",
+                       "\"vbus\":%s,\"chg\":\"%s\",\"chg_stat\":%u,\"err\":%u,"
+                       "\"on_bat_s\":%u}",
                        (double)bat.voltage_v,
                        (double)bat.current_ma,
                        (double)bat.temp_c,
@@ -140,7 +142,8 @@ static void ph_uplink(void)
                        bat.vbus ? "true" : "false",
                        bat.status,
                        bat.chg_stat,
-                       bat.err);
+                       bat.err,
+                       bat_runtime_on_bat_s());
     } else {
         len = snprintf(payload, sizeof(payload), "{\"error\":\"npm1300\"}");
     }

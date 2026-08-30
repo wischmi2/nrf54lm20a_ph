@@ -7,6 +7,7 @@
  */
 
 #include "battery.h"
+#include "bat_runtime.h"
 
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
@@ -182,11 +183,12 @@ static int cmd_bat_read(const struct shell *sh, size_t argc, char **argv)
         return err;
     }
 
-    shell_print(sh, "V=%.3f I=%.1f mA T=%.1f C die=%.1f C VBUS=%s status=%s chg_stat=0x%02x err=0x%02x",
+    shell_print(sh, "V=%.3f I=%.1f mA T=%.1f C die=%.1f C VBUS=%s status=%s "
+                "chg_stat=0x%02x err=0x%02x on_bat_s=%u",
                 (double)sample.voltage_v, (double)sample.current_ma,
                 (double)sample.temp_c, (double)sample.die_c,
                 sample.vbus ? "yes" : "no", sample.status,
-                sample.chg_stat, sample.err);
+                sample.chg_stat, sample.err, bat_runtime_on_bat_s());
     return 0;
 }
 

@@ -5,6 +5,7 @@
 
 #include "power_sleep.h"
 
+#include "bat_runtime.h"
 #include "ph_oem.h"
 #include "sample_print.h"
 #include "status_led.h"
@@ -81,6 +82,7 @@ void power_sleep_enter(void)
     }
 
     buses_suspend();
+    bat_runtime_poll();
     printk("power: sleep enter  atlas hibernate  rgb off  i2c %s\n",
            buses_suspended ? "suspend" : "up");
 }
@@ -89,5 +91,6 @@ void power_sleep_exit(void)
 {
     power_sleep_buses_resume();
     sample_print_pause(false);
+    bat_runtime_poll();
     printk("power: sleep exit\n");
 }
