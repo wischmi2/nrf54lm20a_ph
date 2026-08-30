@@ -20,6 +20,7 @@ target_sources(app PRIVATE
   src/temp_sensor.c
   src/battery.c
   src/status_led.c
+  src/power_sleep.c
   src/golioth_ph.c
   src/ph_shell.c
 )

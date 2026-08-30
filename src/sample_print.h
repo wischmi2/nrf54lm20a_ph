@@ -8,3 +8,4 @@
 
 void sample_print_enable(bool on);
 bool sample_print_is_enabled(void);
+void sample_print_pause(bool pause);

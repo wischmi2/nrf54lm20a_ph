@@ -35,6 +35,7 @@ LOG_MODULE_REGISTER(main);
 static K_THREAD_STACK_DEFINE(sample_stack, SAMPLE_STACK_SIZE);
 static struct k_thread sample_thread;
 static bool sample_print_enabled = IS_ENABLED(CONFIG_SAMPLE_PRINT);
+static bool sample_print_paused;
 
 void sample_print_enable(bool on)
 {
@@ -44,6 +45,11 @@ void sample_print_enable(bool on)
 bool sample_print_is_enabled(void)
 {
     return sample_print_enabled;
+}
+
+void sample_print_pause(bool pause)
+{
+    sample_print_paused = pause;
 }
 
 static float sample_temp_c(void)
@@ -91,7 +97,7 @@ static void sample_loop(void *p1, void *p2, void *p3)
     ARG_UNUSED(p3);
 
     while (1) {
-        if (sample_print_enabled) {
+        if (sample_print_enabled && !sample_print_paused) {
             print_sample();
         }
         k_sleep(K_SECONDS(CONFIG_SAMPLE_PRINT_PERIOD_S));
@@ -178,7 +184,8 @@ int main(void)
         LOG_WRN("Pouch not started (err %d) — serial still works; "
                 "upload crt.der/key.der then reboot", err);
     } else {
-        printk("pouch: ready, advertising as %s\n", CONFIG_BT_DEVICE_NAME);
+        printk("pouch: ready, advertising as %s for %u s\n",
+               CONFIG_BT_DEVICE_NAME, CONFIG_EXAMPLE_ADV_WINDOW_S);
         printk("local 5s log %s (ph log on|off)\n",
                sample_print_enabled ? "on" : "off");
     }
@@ -188,9 +195,8 @@ int main(void)
         return err;
     }
 
-    LOG_INF("Advertising started as %s (sync requested)", CONFIG_BT_DEVICE_NAME);
-    ble_peripheral_request_gateway(true);
-    ble_peripheral_status_start();
+    LOG_INF("Advertising started as %s (sync requested, %u s window)",
+            CONFIG_BT_DEVICE_NAME, CONFIG_EXAMPLE_ADV_WINDOW_S);
 
     return 0;
 }

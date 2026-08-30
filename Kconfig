@@ -14,9 +14,26 @@ config EXAMPLE_SYNC_PERIOD_S
     default 300
     range 5 3600
     help
-      After a successful sync, wait this long before requesting the next
-      sync from a Pouch gateway. A pH sample is taken and uplinked once
-      per sync. Overridable at runtime by the SAMPLE_INTERVAL_S setting.
+      After a sync (or a missed advertise window), keep the radio off this
+      long before advertising again. A pH sample is taken and uplinked once
+      per successful sync. Overridable at runtime by SAMPLE_INTERVAL_S.
+
+config EXAMPLE_ADV_WINDOW_S
+    int "Gateway advertise window (s)"
+    default 45
+    range 5 300
+    help
+      How long to advertise with sync_req set while looking for a Pouch
+      gateway. If nothing connects, the radio stops and the node sleeps
+      for EXAMPLE_SYNC_PERIOD_S.
+
+config EXAMPLE_ADV_RETRIES
+    int "Advertise retries after a failed connect"
+    default 2
+    range 0 8
+    help
+      Extra advertise windows after a connect that never reaches a Pouch
+      session (bond mismatch, instant drop). 0 sleeps immediately.
 
 config EXAMPLE_CREDENTIALS_DIR
     string "Directory containing credentials"

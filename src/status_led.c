@@ -10,6 +10,7 @@
 #include <zephyr/drivers/pwm.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/atomic.h>
 
 LOG_MODULE_REGISTER(status_led, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -23,6 +24,7 @@ static const struct pwm_dt_spec pwm_green = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led2));
 
 static K_THREAD_STACK_DEFINE(rainbow_stack, RAINBOW_STACK_SIZE);
 static struct k_thread rainbow_thread;
+static atomic_t rainbow_on;
 
 static uint32_t level_to_pulse(uint8_t level)
 {
@@ -104,6 +106,12 @@ static void rainbow_loop(void *p1, void *p2, void *p3)
         uint8_t g;
         uint8_t b;
 
+        if (!atomic_get(&rainbow_on)) {
+            (void)set_rgb(0, 0, 0);
+            k_sleep(K_MSEC(500));
+            continue;
+        }
+
         hsv_to_rgb(hue, &r, &g, &b);
         (void)set_rgb(r, g, b);
         hue = (uint16_t)((hue + 2U) % 360U);
@@ -120,11 +128,23 @@ int status_led_init(void)
     }
 
     (void)set_rgb(0, 0, 0);
+    atomic_set(&rainbow_on, 0);
 
     k_thread_create(&rainbow_thread, rainbow_stack, RAINBOW_STACK_SIZE,
                     rainbow_loop, NULL, NULL, NULL,
                     K_PRIO_PREEMPT(9), 0, K_NO_WAIT);
     k_thread_name_set(&rainbow_thread, "rgb");
-    LOG_INF("XIAO RGB rainbow started");
+    LOG_INF("XIAO RGB off (on while gateway is connected)");
     return 0;
+}
+
+void status_led_on(void)
+{
+    atomic_set(&rainbow_on, 1);
+}
+
+void status_led_off(void)
+{
+    atomic_set(&rainbow_on, 0);
+    (void)set_rgb(0, 0, 0);
 }

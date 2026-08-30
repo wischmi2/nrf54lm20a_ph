@@ -20,9 +20,20 @@ register `0x07`. I2C is forced to **100 kHz** (Atlas maximum).
 
 ## Stream paths
 
-Once per gateway sync (default 300 s / 5 min, or Golioth setting
-`SAMPLE_INTERVAL_S`) the node writes two LightDB Stream JSON objects.
+Once per gateway sync the node writes two LightDB Stream JSON objects.
 Pouch path `.s/` is Golioth stream.
+
+Between syncs the radio is **off** for `SAMPLE_INTERVAL_S` (default 300 s /
+5 min). It then advertises with `sync_req` set for
+`CONFIG_EXAMPLE_ADV_WINDOW_S` (default 45 s). If no gateway connects, it
+sleeps again. A connect that never reaches a Pouch session (bond mismatch)
+retries advertise up to `CONFIG_EXAMPLE_ADV_RETRIES` times (default 2)
+before sleeping. Atlas stays in hibernate (`0x06` = 0), the XIAO RGB is off,
+and TWIM22 is suspended. The hardware floor is Atlas hibernate plus the
+always-on ADuM1250 — there is no load switch on this PCB.
+
+Measure wait current on **battery only** with USB unplugged. USB VBUS and
+the SAMD11 CDC bridge keep the board awake for COM11.
 
 ### `.s/ph`
 
@@ -166,7 +177,7 @@ hibernate. That is what `ph read` does.
 
 | Key | Type | Meaning |
 |-----|------|---------|
-| `SAMPLE_INTERVAL_S` | int | Seconds between syncs (5–3600). Firmware default is 300 (5 min) |
+| `SAMPLE_INTERVAL_S` | int | Radio-off seconds between advertise windows (5–3600). Firmware default is 300 (5 min) |
 | `TEMP_OVERRIDE_C` | float | Compensation °C if J2 has no DS18B20 |
 | `LED` | bool | Atlas OEM LED |
 | `CAL_CMD` | int | `0` idle, `1` clear, `2` low(4.0), `3` mid(7.0), `4` high(10.0) |
@@ -220,4 +231,8 @@ provision.bat
 After a successful upload, reset the board. Confirm with `fs ls /lfs1/credentials`.
 
 Reboot. A nearby [Pouch gateway](https://github.com/golioth/pouch-gateway)
-must be running or the node only advertises.
+must be running during the advertise window or the node goes back to sleep.
+
+COM11 after a successful sync should show `pouch: sleeping 300 s (radio off)`,
+then ~5 minutes later `pouch: waking` and `sync_req=1`. There are no
+`pouch: waiting` lines during the radio-off window.

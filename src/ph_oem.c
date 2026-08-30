@@ -9,6 +9,7 @@
  */
 
 #include "ph_oem.h"
+#include "power_sleep.h"
 
 #include <errno.h>
 #include <string.h>
@@ -65,6 +66,7 @@ static int write_reg(uint8_t reg, const uint8_t *data, size_t len)
         memcpy(&buf[1], data, len);
     }
 
+    power_sleep_buses_resume();
     return i2c_write_dt(&ph_i2c, buf, len + 1);
 }
 
@@ -75,6 +77,7 @@ static int write_u8(uint8_t reg, uint8_t value)
 
 static int read_regs(uint8_t reg, uint8_t *data, size_t len)
 {
+    power_sleep_buses_resume();
     int err = i2c_write_dt(&ph_i2c, &reg, 1);
     if (err) {
         return err;
@@ -125,9 +128,9 @@ int ph_oem_init(void)
         return -EIO;
     }
 
-    err = ph_oem_set_led(true);
+    err = ph_oem_set_led(false);
     if (err) {
-        LOG_WRN("Failed to turn OEM LED on (err %d)", err);
+        LOG_WRN("Failed to turn OEM LED off (err %d)", err);
     }
 
     err = ph_oem_set_active(false);

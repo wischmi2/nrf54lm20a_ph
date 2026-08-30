@@ -4,14 +4,16 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  *
- * BLE peripheral for the Pouch GATT transport. Advertises the Pouch service,
- * asks a nearby Golioth gateway to sync, and handles pairing.
+ * BLE peripheral for the Pouch GATT transport. Advertises only when a
+ * sync is due, then sleeps with the radio off until the next interval.
  */
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(ble_peripheral);
 
 #include "ble_peripheral.h"
+#include "power_sleep.h"
+#include "status_led.h"
 
 #include <stdio.h>
 #include <zephyr/bluetooth/bluetooth.h>
@@ -26,6 +28,8 @@ LOG_MODULE_REGISTER(ble_peripheral);
 
 static struct bt_conn *default_conn;
 static uint32_t sync_period_s = CONFIG_EXAMPLE_SYNC_PERIOD_S;
+static bool conn_sync_ok;
+static uint8_t bounce_retries;
 
 static struct pouch_gatt_adv service_data = POUCH_GATT_ADV_DATA_INIT;
 
@@ -65,7 +69,12 @@ static void peer_str(struct bt_conn *conn, char *buf, size_t len)
 }
 
 static void status_work_handler(struct k_work *work);
+static void sleep_wake_work_handler(struct k_work *work);
+static void adv_timeout_work_handler(struct k_work *work);
+
 K_WORK_DELAYABLE_DEFINE(status_work, status_work_handler);
+K_WORK_DELAYABLE_DEFINE(sleep_wake_work, sleep_wake_work_handler);
+K_WORK_DELAYABLE_DEFINE(adv_timeout_work, adv_timeout_work_handler);
 
 static void status_work_handler(struct k_work *work)
 {
@@ -80,6 +89,57 @@ static void status_work_handler(struct k_work *work)
     k_work_schedule(&status_work, K_SECONDS(STATUS_PERIOD_S));
 }
 
+static void ble_adv_stop(void)
+{
+    k_work_cancel_delayable(&status_work);
+    k_work_cancel_delayable(&adv_timeout_work);
+    k_work_cancel_delayable(&sleep_wake_work);
+
+    int err = bt_le_adv_stop();
+    if (err && err != -EALREADY) {
+        printk("pouch: advertising stop failed (err %d)\n", err);
+        LOG_WRN("Advertising stop failed (err %d)", err);
+    }
+}
+
+static void schedule_sleep(void)
+{
+    bounce_retries = 0;
+    ble_adv_stop();
+    status_led_off();
+    power_sleep_enter();
+    printk("pouch: sleeping %u s (radio off)\n", sync_period_s);
+    LOG_INF("Sleeping %u s with radio off", sync_period_s);
+    k_work_schedule(&sleep_wake_work, K_SECONDS(sync_period_s));
+}
+
+static void sleep_wake_work_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+
+    power_sleep_exit();
+    printk("pouch: waking\n");
+    LOG_INF("Waking for gateway sync");
+    int err = ble_peripheral_start();
+    if (err) {
+        printk("pouch: advertising start failed (err %d), sleep again\n", err);
+        schedule_sleep();
+    }
+}
+
+static void adv_timeout_work_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+
+    if (default_conn) {
+        return;
+    }
+
+    printk("pouch: no gateway in %u s, sleeping\n", CONFIG_EXAMPLE_ADV_WINDOW_S);
+    LOG_INF("Advertise window expired, sleeping");
+    schedule_sleep();
+}
+
 static void connected(struct bt_conn *conn, uint8_t err)
 {
     char addr[BT_ADDR_LE_STR_LEN];
@@ -92,36 +152,19 @@ static void connected(struct bt_conn *conn, uint8_t err)
     }
 
     default_conn = conn;
+    conn_sync_ok = false;
+    k_work_cancel_delayable(&adv_timeout_work);
     k_work_cancel_delayable(&status_work);
+    status_led_on();
     printk("pouch: BLE connected  peer=%s\n", addr);
     LOG_INF("Gateway connected %s", addr);
 }
 
-static void sync_request_work_handler(struct k_work *work)
+void ble_peripheral_mark_sync_ok(void)
 {
-    ARG_UNUSED(work);
-    printk("pouch: setting sync request flag\n");
-    LOG_INF("Requesting gateway sync");
-    ble_peripheral_request_gateway(true);
+    conn_sync_ok = true;
+    bounce_retries = 0;
 }
-K_WORK_DELAYABLE_DEFINE(sync_request_work, sync_request_work_handler);
-
-static void resume_advertising(struct k_work *work)
-{
-    ARG_UNUSED(work);
-
-    int err = ble_peripheral_start();
-    if (err) {
-        printk("pouch: advertising restart failed (err %d)\n", err);
-        LOG_ERR("Failed to start advertising (err: %d)", err);
-        return;
-    }
-
-    printk("pouch: advertising again  sync_req=0  next request in %u s\n", sync_period_s);
-    k_work_schedule(&sync_request_work, K_SECONDS(sync_period_s));
-    k_work_schedule(&status_work, K_SECONDS(STATUS_PERIOD_S));
-}
-K_WORK_DEFINE(resume_work, resume_advertising);
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
@@ -132,7 +175,32 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
     LOG_INF("Gateway disconnected %s (reason 0x%02x)", addr, reason);
 
     default_conn = NULL;
-    k_work_submit(&resume_work);
+    status_led_off();
+
+    if (conn_sync_ok) {
+        bounce_retries = 0;
+        schedule_sleep();
+        return;
+    }
+
+    if (bounce_retries < CONFIG_EXAMPLE_ADV_RETRIES) {
+        bounce_retries++;
+        printk("pouch: bounce, retry advertise %u/%u\n",
+               bounce_retries, CONFIG_EXAMPLE_ADV_RETRIES);
+        LOG_INF("Retry advertise after bounce %u/%u",
+                bounce_retries, CONFIG_EXAMPLE_ADV_RETRIES);
+        int err = ble_peripheral_start();
+        if (err) {
+            bounce_retries = 0;
+            schedule_sleep();
+        }
+        return;
+    }
+
+    printk("pouch: bounce retries exhausted, sleeping\n");
+    LOG_INF("Bounce retries exhausted, sleeping");
+    bounce_retries = 0;
+    schedule_sleep();
 }
 
 static void security_changed(struct bt_conn *conn, bt_security_t level, enum bt_security_err err)
@@ -269,16 +337,28 @@ int ble_peripheral_init(void)
 
 int ble_peripheral_start(void)
 {
-    pouch_gatt_adv_req_sync(&service_data, false);
+    pouch_gatt_adv_req_sync(&service_data, true);
     service_data_128.payload = service_data.payload;
+
     int err = bt_le_adv_start(BT_LE_ADV_PARAM(BT_LE_ADV_OPT_CONN | BT_LE_ADV_OPT_USE_IDENTITY,
                                               BT_GAP_ADV_FAST_INT_MIN_1,
                                               BT_GAP_ADV_FAST_INT_MAX_1,
                                               NULL),
                               ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
-    printk("pouch: advertising start  name=%s  sync_req=0  err=%d\n",
-           CONFIG_BT_DEVICE_NAME, err);
-    return err;
+    if (err == -EALREADY) {
+        err = bt_le_adv_update_data(ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
+    }
+    if (err) {
+        printk("pouch: advertising start  name=%s  sync_req=1  err=%d\n",
+               CONFIG_BT_DEVICE_NAME, err);
+        return err;
+    }
+
+    printk("pouch: advertising  name=%s  sync_req=1  window=%u s\n",
+           CONFIG_BT_DEVICE_NAME, CONFIG_EXAMPLE_ADV_WINDOW_S);
+    k_work_schedule(&adv_timeout_work, K_SECONDS(CONFIG_EXAMPLE_ADV_WINDOW_S));
+    k_work_schedule(&status_work, K_NO_WAIT);
+    return 0;
 }
 
 void ble_peripheral_status_start(void)
