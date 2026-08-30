@@ -7,9 +7,11 @@
 
 #include "temp_sensor.h"
 
+#include <errno.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/sensor.h>
+#include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
 LOG_MODULE_REGISTER(temp_sensor, CONFIG_LOG_DEFAULT_LEVEL);
@@ -60,24 +62,38 @@ int temp_sensor_read_c(float *temp_c)
     }
 
 #if HAS_DS18B20
-    if (!sensor_ready) {
+    if (!device_is_ready(ds18b20)) {
         return -ENODEV;
     }
 
-    int err = sensor_sample_fetch(ds18b20);
+    int err = -EIO;
+
+    /* CRC glitches on this bus are common; do not latch one failure forever
+     * or `ph read` / pouch will stick at 25.00 while `sensor get` still works.
+     */
+    for (int try = 0; try < 3; try++) {
+        err = sensor_sample_fetch(ds18b20);
+        if (!err) {
+            break;
+        }
+        LOG_WRN("DS18B20 fetch failed (err %d), retry %d/3", err, try + 1);
+        k_msleep(20);
+    }
+
     if (err) {
         sensor_ready = false;
-        LOG_INF("DS18B20 disappeared (err %d); using default/override", err);
         return err;
     }
 
     struct sensor_value val;
+
     err = sensor_channel_get(ds18b20, SENSOR_CHAN_AMBIENT_TEMP, &val);
     if (err) {
         return err;
     }
 
     *temp_c = sensor_value_to_float(&val);
+    sensor_ready = true;
     return 0;
 #else
     return -ENODEV;
