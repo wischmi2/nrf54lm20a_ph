@@ -19,6 +19,11 @@ twister-out*/
 # Credentials — never commit device keys/certs
 *.der
 *.pem
+*.key
+crt.der
+key.der
+ph_nrf54lm20a.crt.der
+ph_nrf54lm20a.key.der
 credentials/
 
 # Editor / OS
