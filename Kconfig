@@ -1,0 +1,82 @@
+# Copyright (c) 2026 Brian Wischmeyer
+# SPDX-License-Identifier: Apache-2.0
+
+config NCS_APPLICATION_BOOT_BANNER_STRING
+    string
+    default "XIAO nRF54LM20A pH Sensor"
+
+source "$ZEPHYR_BASE/Kconfig"
+
+menu "XIAO nRF54LM20A pH Sensor"
+
+config EXAMPLE_SYNC_PERIOD_S
+    int "Gateway sync period (s)"
+    default 60
+    range 5 3600
+    help
+      After a successful sync, wait this long before requesting the next
+      sync from a Pouch gateway. A pH sample is taken and uplinked once
+      per sync. Overridable at runtime by the SAMPLE_INTERVAL_S setting.
+
+config EXAMPLE_CREDENTIALS_DIR
+    string "Directory containing credentials"
+    default "/lfs1/credentials"
+    help
+      LittleFS directory holding the DER-encoded device certificate
+      (crt.der) and private key (key.der).
+
+config EXAMPLE_FW_UPDATE_COMPONENT
+    string "OTA component name"
+    default "xiao_ph"
+    help
+      Name of the component in the Golioth OTA manifest used for firmware
+      updates on this device.
+
+config APP_BT_AUTO_CONFIRM
+    bool "Auto-confirm Just Works BLE pairing"
+    default y
+    help
+      The XIAO nRF54LM20A has no dedicated confirm button, so by default the
+      app auto-confirms the pairing passkey when a gateway connects.
+
+config PH_OEM_I2C_ADDR
+    hex "Atlas pH OEM I2C address"
+    default 0x65
+    help
+      Default Atlas Scientific pH OEM address. Only used if the devicetree
+      node is missing a reg property.
+
+config PH_OEM_READ_TIMEOUT_MS
+    int "pH conversion timeout (ms)"
+    default 1500
+    range 500 5000
+    help
+      Atlas conversions take ~420 ms. Poll the new-reading register until
+      this timeout.
+
+config PH_DEFAULT_TEMP_C
+    int "Default compensation temperature (0.01 C)"
+    default 2500
+    help
+      Used when no DS18B20 is present and TEMP_OVERRIDE_C is unset.
+      2500 = 25.00 C.
+
+config SAMPLE_PRINT
+    bool "Print pH and battery on the serial console"
+    default n
+    help
+      Periodic USB printk of Atlas pH and nPM1300 readings. Off by
+      default so the node is not polling I2C/1-Wire while waiting for
+      a Pouch sync. Toggle at runtime with "ph log on" / "ph log off".
+      Stream uplink still samples once per gateway sync.
+
+config SAMPLE_PRINT_PERIOD_S
+    int "Local pH + battery print period (s)"
+    default 5
+    range 1 3600
+    help
+      How often to print Atlas pH and nPM1300 battery measurements on
+      the serial console when local logging is enabled. Independent of
+      Pouch/Golioth sync.
+
+endmenu

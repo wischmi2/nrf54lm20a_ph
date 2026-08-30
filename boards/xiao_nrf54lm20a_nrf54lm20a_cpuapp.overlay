@@ -1,0 +1,87 @@
+/*
+ * Copyright (c) 2026 Brian Wischmeyer
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Pin mapping for the custom ph_sensor PCB (KiCad: ph_sensor.kicad_pcb).
+ *
+ *   Atlas pH OEM I2C  -> D4/D5  P1.3/P1.7  TWIM22  (via ADuM1250 isolator)
+ *   DS18B20 1-Wire    -> D0     P1.0       TEMP_DQ (J2, 4.7k pull-up R6)
+ *
+ * Atlas INT is isolated-side only (J5 / INT_ISO) and is not connected to the
+ * nRF. The driver polls register 0x07.
+ *
+ * Atlas max I2C clock is 100 kHz. The board default for i2c22 is 400 kHz.
+ */
+
+#include <zephyr/dt-bindings/gpio/gpio.h>
+#include <zephyr/dt-bindings/i2c/i2c.h>
+
+/*
+ * Seeed's stock layout uses 449 KiB slots, which is not a multiple of the
+ * 4 KiB RRAM erase block, so MCUboot refuses to configure. Drop the unused
+ * TF-M non-secure slots and align image + storage partitions.
+ */
+/delete-node/ &slot0_ns_partition;
+/delete-node/ &slot1_ns_partition;
+
+&slot0_partition {
+	reg = <0x10000 DT_SIZE_K(704)>;
+};
+
+&slot1_partition {
+	reg = <0xc0000 DT_SIZE_K(704)>;
+};
+
+&storage_partition {
+	reg = <0x170000 DT_SIZE_K(64)>;
+};
+
+&i2c22 {
+	status = "okay";
+	clock-frequency = <I2C_BITRATE_STANDARD>;
+
+	atlas_ph: atlas-ph@65 {
+		compatible = "i2c-device";
+		reg = <0x65>;
+		status = "okay";
+	};
+};
+
+/ {
+	w1: w1 {
+		compatible = "zephyr,w1-gpio";
+		gpios = <&gpio1 0 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN | GPIO_PULL_UP)>;
+		status = "okay";
+
+		temp_probe: ds18b20 {
+			compatible = "maxim,ds18b20";
+			family-code = <0x28>;
+			resolution = <12>;
+			status = "okay";
+		};
+	};
+
+	aliases {
+		ds18b20 = &temp_probe;
+	};
+
+	/*
+	 * Must live in this overlay (not app.overlay). Zephyr stops looking
+	 * for app.overlay once boards/<board>.overlay exists, so LittleFS
+	 * never mounted and smpmgr file upload failed with EMSGSIZE.
+	 */
+	fstab {
+		compatible = "zephyr,fstab";
+		lfs1: lfs1 {
+			compatible = "zephyr,fstab,littlefs";
+			mount-point = "/lfs1";
+			partition = <&storage_partition>;
+			automount;
+			read-size = <16>;
+			prog-size = <16>;
+			cache-size = <64>;
+			lookahead-size = <32>;
+			block-cycles = <512>;
+		};
+	};
+};

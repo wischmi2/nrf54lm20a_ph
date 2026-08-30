@@ -1,0 +1,8 @@
+/*
+ * Copyright (c) 2026 Brian Wischmeyer
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Intentionally empty. Zephyr's CMake picks boards/<board>.overlay and
+ * then skips this file. LittleFS, partitions, and pins are in
+ * boards/xiao_nrf54lm20a_nrf54lm20a_cpuapp.overlay.
+ */

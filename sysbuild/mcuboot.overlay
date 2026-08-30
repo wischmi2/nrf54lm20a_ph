@@ -1,0 +1,28 @@
+/*
+ * Copyright (c) 2026 Brian Wischmeyer
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * MCUboot image overlay: keep partitions identical to the application overlay.
+ * The board DTS chooses slot0 for the app, so MCUboot must override that and
+ * link into boot_partition at 0x0.
+ */
+/ {
+	chosen {
+		zephyr,code-partition = &boot_partition;
+	};
+};
+
+/delete-node/ &slot0_ns_partition;
+/delete-node/ &slot1_ns_partition;
+
+&slot0_partition {
+	reg = <0x10000 DT_SIZE_K(704)>;
+};
+
+&slot1_partition {
+	reg = <0xc0000 DT_SIZE_K(704)>;
+};
+
+&storage_partition {
+	reg = <0x170000 DT_SIZE_K(64)>;
+};

@@ -1,0 +1,34 @@
+# Copyright (c) 2026 Brian Wischmeyer
+# SPDX-License-Identifier: Apache-2.0
+#
+# West manifest for the XIAO nRF54LM20A pH-sensor application.
+#
+# T3 topology: this repo is the manifest. Pouch's west-ncs.yml pulls the nRF
+# Connect SDK at the revision Pouch v0.2.0 is tested against.
+#
+# From a directory that contains this folder:
+#   west init -l xiao_ph
+#   west update
+#   west zephyr-export
+#   pip install -r modules/lib/pouch/requirements.txt
+#
+# Or from inside this folder (standalone workspace):
+#   west init -l .
+#   west update
+#   west zephyr-export
+#   pip install -r modules/lib/pouch/requirements.txt
+
+manifest:
+  remotes:
+    - name: golioth
+      url-base: https://github.com/golioth
+
+  projects:
+    - name: pouch
+      remote: golioth
+      revision: v0.2.0
+      path: modules/lib/pouch
+      import: west-ncs.yml
+
+  self:
+    path: .

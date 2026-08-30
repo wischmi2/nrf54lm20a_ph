@@ -1,0 +1,26 @@
+# West / Zephyr build output
+build/
+build-*/
+twister-out*/
+
+# West workspace metadata when this repo is the workspace root
+/.west/
+/modules/
+/nrf/
+/zephyr/
+/bootloader/
+/tools/
+/test/
+/nrfxlib/
+/mbedtls/
+/mcuboot/
+/modules/
+
+# Credentials — never commit device keys/certs
+*.der
+*.pem
+credentials/
+
+# Editor / OS
+*.swp
+.DS_Store
