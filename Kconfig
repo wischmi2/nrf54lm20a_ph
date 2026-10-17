@@ -11,7 +11,7 @@ menu "XIAO nRF54LM20A pH Sensor"
 
 config EXAMPLE_SYNC_PERIOD_S
     int "Gateway sync period (s)"
-    default 300
+    default 30
     range 5 3600
     help
       After a sync (or a missed advertise window), keep the radio off this
@@ -20,7 +20,7 @@ config EXAMPLE_SYNC_PERIOD_S
 
 config EXAMPLE_ADV_WINDOW_S
     int "Gateway advertise window (s)"
-    default 45
+    default 15
     range 5 300
     help
       How long to advertise with sync_req set while looking for a Pouch

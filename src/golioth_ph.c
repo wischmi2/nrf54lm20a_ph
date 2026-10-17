@@ -6,7 +6,7 @@
  * temperature override, OEM LED, and calibration.
  *
  * Settings keys (create these in the Golioth console):
- *   SAMPLE_INTERVAL_S  int     radio-off seconds between advertise windows (default 300)
+ *   SAMPLE_INTERVAL_S  int     radio-off seconds between advertise windows (default 30)
  *   TEMP_OVERRIDE_C    float   compensation C if no DS18B20 (NaN/omit = auto)
  *   LED                bool    Atlas OEM LED
  *   CAL_CMD            int     0 idle, 1 clear, 2 low(4.0), 3 mid(7.0), 4 high(10.0)

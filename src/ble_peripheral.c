@@ -30,6 +30,7 @@ static struct bt_conn *default_conn;
 static uint32_t sync_period_s = CONFIG_EXAMPLE_SYNC_PERIOD_S;
 static bool conn_sync_ok;
 static uint8_t bounce_retries;
+static bool bounce_pending;
 
 static struct pouch_gatt_adv service_data = POUCH_GATT_ADV_DATA_INIT;
 
@@ -71,10 +72,12 @@ static void peer_str(struct bt_conn *conn, char *buf, size_t len)
 static void status_work_handler(struct k_work *work);
 static void sleep_wake_work_handler(struct k_work *work);
 static void adv_timeout_work_handler(struct k_work *work);
+static void bounce_work_handler(struct k_work *work);
 
 K_WORK_DELAYABLE_DEFINE(status_work, status_work_handler);
 K_WORK_DELAYABLE_DEFINE(sleep_wake_work, sleep_wake_work_handler);
 K_WORK_DELAYABLE_DEFINE(adv_timeout_work, adv_timeout_work_handler);
+K_WORK_DEFINE(bounce_work, bounce_work_handler);
 
 static void status_work_handler(struct k_work *work)
 {
@@ -105,6 +108,7 @@ static void ble_adv_stop(void)
 static void schedule_sleep(void)
 {
     bounce_retries = 0;
+    bounce_pending = false;
     ble_adv_stop();
     status_led_off();
     power_sleep_enter();
@@ -140,6 +144,32 @@ static void adv_timeout_work_handler(struct k_work *work)
     schedule_sleep();
 }
 
+static void bounce_work_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+
+    int err = ble_peripheral_start();
+    if (err) {
+        printk("pouch: bounce advertise failed (err %d), sleeping\n", err);
+        bounce_retries = 0;
+        schedule_sleep();
+    }
+}
+
+static void recycled(void)
+{
+    if (!bounce_pending) {
+        return;
+    }
+
+    bounce_pending = false;
+    printk("pouch: conn recycled, retry advertise %u/%u\n",
+           bounce_retries, CONFIG_EXAMPLE_ADV_RETRIES);
+    LOG_INF("Connection recycled, retry advertise %u/%u",
+            bounce_retries, CONFIG_EXAMPLE_ADV_RETRIES);
+    k_work_submit(&bounce_work);
+}
+
 static void connected(struct bt_conn *conn, uint8_t err)
 {
     char addr[BT_ADDR_LE_STR_LEN];
@@ -151,7 +181,10 @@ static void connected(struct bt_conn *conn, uint8_t err)
         return;
     }
 
-    default_conn = conn;
+    if (default_conn) {
+        bt_conn_unref(default_conn);
+    }
+    default_conn = bt_conn_ref(conn);
     conn_sync_ok = false;
     k_work_cancel_delayable(&adv_timeout_work);
     k_work_cancel_delayable(&status_work);
@@ -164,6 +197,7 @@ void ble_peripheral_mark_sync_ok(void)
 {
     conn_sync_ok = true;
     bounce_retries = 0;
+    bounce_pending = false;
 }
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)
@@ -174,7 +208,10 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
     printk("pouch: BLE disconnected  peer=%s  reason=0x%02x\n", addr, reason);
     LOG_INF("Gateway disconnected %s (reason 0x%02x)", addr, reason);
 
-    default_conn = NULL;
+    if (default_conn) {
+        bt_conn_unref(default_conn);
+        default_conn = NULL;
+    }
     status_led_off();
 
     if (conn_sync_ok) {
@@ -185,15 +222,11 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 
     if (bounce_retries < CONFIG_EXAMPLE_ADV_RETRIES) {
         bounce_retries++;
-        printk("pouch: bounce, retry advertise %u/%u\n",
+        bounce_pending = true;
+        printk("pouch: bounce, wait for conn recycle %u/%u\n",
                bounce_retries, CONFIG_EXAMPLE_ADV_RETRIES);
-        LOG_INF("Retry advertise after bounce %u/%u",
+        LOG_INF("Retry advertise after recycle %u/%u",
                 bounce_retries, CONFIG_EXAMPLE_ADV_RETRIES);
-        int err = ble_peripheral_start();
-        if (err) {
-            bounce_retries = 0;
-            schedule_sleep();
-        }
         return;
     }
 
@@ -222,6 +255,7 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
     .connected = connected,
     .disconnected = disconnected,
     .security_changed = security_changed,
+    .recycled = recycled,
 };
 
 static void auth_passkey_display(struct bt_conn *conn, unsigned int passkey)
